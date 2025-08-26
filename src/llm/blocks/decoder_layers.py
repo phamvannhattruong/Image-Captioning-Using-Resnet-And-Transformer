@@ -34,12 +34,9 @@ class DecoderLayer(nn.Module):
             # 3. compute encoder - decoder attention
             _x = x
             x = self.enc_dec_attention(q=x, k=enc, v=enc, mask=src_mask)
-
-            # 4. add and norm
             x = self.dropout2(x)
             x = self.norm2(x + _x)
 
-        # 5. positionwise feed forward network
         _x = x
         x = self.ffn(x)
 
