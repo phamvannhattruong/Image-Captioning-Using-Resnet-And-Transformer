@@ -16,7 +16,6 @@ def tokenize_caption(caption: str, lowercase: bool = True) -> List[str]:
 
 
 def load_captions(path: str) -> List[str]:
-
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
     captions = []
