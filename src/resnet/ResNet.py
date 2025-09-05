@@ -98,11 +98,10 @@ class ResNet(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
         
-        x = self.avgpool(x)
-        x = x.reshape(x.shape[0], -1)
-        x = self.fc(x)
-        
-        return x
+        feature = self.avgpool(x) #get feature
+        feature = feature.view(feature.size(0), -1)
+
+        return feature
         
     def _make_layer(self, ResBlock, blocks, planes, stride=1):
         ii_downsample = None
