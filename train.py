@@ -10,6 +10,7 @@ from src.data.dataset import JsonCaptionsDataset, SampleCaption
 from src.main.model.ImageCaptioningModel import VisionEncoderDecoder
 from src.token.TokenDrop import TokenDrop
 from src.utils.utils import save_checkpoint, load_checkpoint, save_tokenizer, CHECKPOINT_DIR, SAVE_EVERY
+
 train_transform = transforms.Compose([
     transforms.Resize(image_size),
     transforms.RandomCrop(image_size),
