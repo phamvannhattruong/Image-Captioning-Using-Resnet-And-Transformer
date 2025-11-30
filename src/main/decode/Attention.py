@@ -1,35 +1,46 @@
-from torch import nn
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
-class MultiHeadAttention(nn.Module):
-    def __init__(self, dim, num_heads, dropout=0.1, is_cross_attention=False):
+class Attention(nn.Module):
+    def __init__(self, dim, num_heads=8, dropout=0.1):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
-        assert dim % num_heads == 0, "dim phải chia hết cho num_heads"
-        self.is_cross_attention = is_cross_attention
+        self.scale = self.head_dim ** -0.5
 
-        self.q = nn.Linear(dim, dim)
-        self.k = nn.Linear(dim, dim)
-        self.v = nn.Linear(dim, dim)
-        self.out = nn.Linear(dim, dim)
+        self.q_proj = nn.Linear(dim, dim)
+        self.k_proj = nn.Linear(dim, dim)
+        self.v_proj = nn.Linear(dim, dim)
+        self.out_proj = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, encoder_out=None, mask=None):
-        B, N, D = x.shape
-        q = self.q(x).view(B, N, self.num_heads, self.head_dim).transpose(1, 2)
+    def forward(self, query, key, value, mask=None):
+        B, T, D = query.shape
+        H = self.num_heads
 
-        if self.is_cross_attention and encoder_out is not None:
-            k = self.k(encoder_out).view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
-            v = self.v(encoder_out).view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        else:
-            k = self.k(x).view(B, N, self.num_heads, self.head_dim).transpose(1, 2)
-            v = self.v(x).view(B, N, self.num_heads, self.head_dim).transpose(1, 2)
+        # 1. Chiếu Q, K, V và reshape cho multi-head attention
+        q = self.q_proj(query).view(B, T, H, self.head_dim).transpose(1, 2) # [B, H, T, D_h]
+        k = self.k_proj(key).view(B, -1, H, self.head_dim).transpose(1, 2)   # [B, H, S, D_h]
+        v = self.v_proj(value).view(B, -1, H, self.head_dim).transpose(1, 2) # [B, H, S, D_h]
 
-        attn = (q @ k.transpose(-2, -1)) / (self.head_dim ** 0.5)
+        # 2. Tính Attention Scores
+        # Scores: [B, H, T, S]
+        scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale
+
+        # 3. Áp dụng Mask (Nếu có)
         if mask is not None:
-            attn = attn.masked_fill(mask == 0, float('-inf'))
-        attn = F.softmax(attn, dim=-1)
-        attn = self.dropout(attn)
-        out = (attn @ v).transpose(1, 2).contiguous().view(B, N, D)
-        return self.out(out)
+            # Mask có thể là [B, 1, 1, S] (padding) hoặc [1, 1, T, T] (look-ahead)
+            if mask.ndim == 4:
+                scores = scores + mask  # Thêm mask (giá trị -inf)
+            else: # Dành cho padding mask [B, 1, S]
+                scores = scores.masked_fill(mask.unsqueeze(1).unsqueeze(2) == 0, float('-inf'))
+
+        # 4. Tính Weights và áp dụng Dropout
+        weights = F.softmax(scores, dim=-1)
+        weights = self.dropout(weights)
+
+        # 5. Tính đầu ra, ghép các đầu và chiếu lại
+        # Output: [B, H, T, D_h] -> [B, T, H, D_h] -> [B, T, D]
+        output = torch.matmul(weights, v).transpose(1, 2).contiguous().view(B, T, D)
+        return self.out_proj(output)

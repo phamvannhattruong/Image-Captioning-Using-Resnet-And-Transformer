@@ -1,36 +1,29 @@
 from torch import nn
-import torch
-from .block import T5Block
+from attention import Attention
+from feedforward import FFN
 
-class T5Decoder(nn.Module):
-    def __init__(
-        self,
-        vocab_size,
-        dim=512,
-        num_heads=8,
-        num_layers=6,
-        ff_dim=2048,
-        dropout=0.1,
-        max_len=64,
-    ):
+class T5Block(nn.Module):
+    def __init__(self, dim, num_heads, ff_dim, dropout=0.1):
         super().__init__()
-        self.token_embed = nn.Embedding(vocab_size, dim)
-        self.pos_embed = nn.Embedding(max_len, dim)
-        self.layers = nn.ModuleList([
-            T5Block(dim, num_heads, ff_dim, dropout)
-            for _ in range(num_layers)
-        ])
-        self.norm = nn.LayerNorm(dim)
-        self.fc_out = nn.Linear(dim, vocab_size)
+        # 1. Self-Attention (Autoregressive)
+        self.norm1 = nn.LayerNorm(dim)
+        self.self_attn = Attention(dim, num_heads, dropout)
 
-    def forward(self, input_ids, encoder_out, mask=None):
-        B, T = input_ids.shape
-        positions = torch.arange(T, device=input_ids.device).unsqueeze(0)
-        x = self.token_embed(input_ids) + self.pos_embed(positions)
+        # 2. Cross-Attention (Encoder-Decoder Attention)
+        self.norm2 = nn.LayerNorm(dim)
+        self.cross_attn = Attention(dim, num_heads, dropout)
 
-        for layer in self.layers:
-            x = layer(x, encoder_out, mask)
+        # 3. Feed-Forward
+        self.norm3 = nn.LayerNorm(dim)
+        self.ffn = FFN(dim, ff_dim, dropout)
 
-        x = self.norm(x)
-        logits = self.fc_out(x)
-        return logits
+    def forward(self, x, encoder_out, mask=None):
+        # Self-Attention (mask=mask, thường là look-ahead mask)
+        x = x + self.self_attn(self.norm1(x), x, x, mask=mask)
+
+        # Cross-Attention (key/value từ encoder_out)
+        x = x + self.cross_attn(self.norm2(x), encoder_out, encoder_out)
+
+        # Feed-Forward
+        x = x + self.ffn(self.norm3(x))
+        return x
