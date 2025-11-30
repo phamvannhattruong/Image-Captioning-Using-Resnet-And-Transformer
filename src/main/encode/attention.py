@@ -1,13 +1,13 @@
-import torch
 from torch import nn
 import torch.nn.functional as F
+
 class MultiHeadSelfAttention(nn.Module):
     def __init__(self, dim, num_heads=8, dropout=0.1):
         super().__init__()
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         assert dim % num_heads == 0, "Embedding dim phải chia hết cho số heads"
-        
+
         self.qkv = nn.Linear(dim, dim * 3)
         self.proj = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(dropout)
